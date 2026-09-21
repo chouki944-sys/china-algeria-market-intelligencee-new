@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
 
 const COMTRADE_KEY = "";
@@ -24,16 +24,12 @@ function createServer() {
     version: "0.1.0"
   });
 
-  // --------------------------------------------------
   // 1. UN COMTRADE
-  // --------------------------------------------------
-
   server.registerTool(
     "trade_data",
     {
       title: "UN Comtrade trade data",
-      description:
-        "Query official UN Comtrade merchandise trade data.",
+      description: "Query official UN Comtrade merchandise trade data.",
       inputSchema: {
         reporterCode: z.string(),
         partnerCode: z.string().default("156"),
@@ -43,14 +39,7 @@ function createServer() {
         motCode: z.string().default("0")
       }
     },
-    async ({
-      reporterCode,
-      partnerCode,
-      cmdCode,
-      period,
-      flowCode,
-      motCode
-    }) => {
+    async ({ reporterCode, partnerCode, cmdCode, period, flowCode, motCode }) => {
       const key = COMTRADE_KEY
         ? `&subscription-key=${encodeURIComponent(COMTRADE_KEY)}`
         : "";
@@ -93,16 +82,12 @@ function createServer() {
     }
   );
 
-  // --------------------------------------------------
   // 2. MULTI-YEAR TRADE
-  // --------------------------------------------------
-
   server.registerTool(
     "trade_series",
     {
       title: "UN Comtrade multi-year series",
-      description:
-        "Retrieve year-by-year trade data.",
+      description: "Retrieve year-by-year trade data.",
       inputSchema: {
         reporterCode: z.string(),
         partnerCode: z.string(),
@@ -112,14 +97,7 @@ function createServer() {
         flowCode: z.enum(["M", "X"]).default("M")
       }
     },
-    async ({
-      reporterCode,
-      partnerCode,
-      cmdCode,
-      startYear,
-      endYear,
-      flowCode
-    }) => {
+    async ({ reporterCode, partnerCode, cmdCode, startYear, endYear, flowCode }) => {
       const rows: any[] = [];
 
       for (let year = startYear; year <= endYear; year++) {
@@ -139,7 +117,6 @@ function createServer() {
           `&maxRecords=500${key}`;
 
         const data = await getJson(url);
-
         rows.push(...(data.data || []));
       }
 
@@ -167,16 +144,12 @@ function createServer() {
     }
   );
 
-  // --------------------------------------------------
   // 3. WORLD BANK
-  // --------------------------------------------------
-
   server.registerTool(
     "world_bank_indicator",
     {
       title: "World Bank indicator",
-      description:
-        "Retrieve World Bank economic and development indicators.",
+      description: "Retrieve World Bank economic and development indicators.",
       inputSchema: {
         country: z.string(),
         indicator: z.string(),
@@ -184,12 +157,7 @@ function createServer() {
         endYear: z.number().int().default(2025)
       }
     },
-    async ({
-      country,
-      indicator,
-      startYear,
-      endYear
-    }) => {
+    async ({ country, indicator, startYear, endYear }) => {
       const url =
         `https://api.worldbank.org/v2/country/${country}` +
         `/indicator/${indicator}` +
@@ -217,26 +185,19 @@ function createServer() {
     }
   );
 
-  // --------------------------------------------------
   // 4. COMPANY SEARCH — WIKIDATA
-  // --------------------------------------------------
-
   server.registerTool(
     "company_wikidata",
     {
       title: "Company / organization lookup",
-      description:
-        "Search Wikidata for companies and organizations.",
+      description: "Search Wikidata for companies and organizations.",
       inputSchema: {
         query: z.string(),
         country: z.string().optional()
       }
     },
     async ({ query, country }) => {
-      const searchTerm = country
-        ? `${query} ${country}`
-        : query;
-
+      const searchTerm = country ? `${query} ${country}` : query;
       const safeQuery = searchTerm.replace(/"/g, '\\"');
 
       const sparql = `
@@ -271,15 +232,13 @@ LIMIT 25
 
       const data = await getJson(url);
 
-      const results = (data.results?.bindings || []).map(
-        (item: any) => ({
-          name: item.itemLabel?.value,
-          website: item.website?.value,
-          country: item.countryLabel?.value,
-          description: item.description?.value,
-          wikidata: item.item?.value
-        })
-      );
+      const results = (data.results?.bindings || []).map((item: any) => ({
+        name: item.itemLabel?.value,
+        website: item.website?.value,
+        country: item.countryLabel?.value,
+        description: item.description?.value,
+        wikidata: item.item?.value
+      }));
 
       return {
         content: [
@@ -300,45 +259,25 @@ LIMIT 25
     }
   );
 
-  // --------------------------------------------------
   // 5. PRODUCT OPPORTUNITY
-  // --------------------------------------------------
-
   server.registerTool(
     "product_opportunity_brief",
     {
       title: "Industrial product opportunity brief",
-      description:
-        "Create a structured research plan for an industrial product.",
+      description: "Create a structured research plan for an industrial product.",
       inputSchema: {
         product: z.string(),
         hsCodes: z.array(z.string()).optional(),
-        countries: z
-          .array(z.string())
-          .default(["Algeria", "China"]),
-        years: z
-          .array(z.number().int())
-          .default([
-            2021,
-            2022,
-            2023,
-            2024,
-            2025
-          ])
+        countries: z.array(z.string()).default(["Algeria", "China"]),
+        years: z.array(z.number().int()).default([2021, 2022, 2023, 2024, 2025])
       }
     },
-    async ({
-      product,
-      hsCodes,
-      countries,
-      years
-    }) => {
+    async ({ product, hsCodes, countries, years }) => {
       const brief = {
         product,
         hsCodes,
         countries,
         years,
-
         requiredEvidence: [
           "UN Comtrade import/export value and quantity",
           "Top supplier countries",
@@ -357,7 +296,6 @@ LIMIT 25
           "Evidence of demand",
           "Tenders and industrial projects"
         ],
-
         qualityRules: [
           "Separate observed facts from estimates",
           "Cite every external claim",
@@ -373,11 +311,7 @@ LIMIT 25
         content: [
           {
             type: "text",
-            text: JSON.stringify(
-              brief,
-              null,
-              2
-            )
+            text: JSON.stringify(brief, null, 2)
           }
         ]
       };
@@ -391,9 +325,10 @@ LIMIT 25
 // CLOUDFLARE WORKER
 // --------------------------------------------------
 
+let transport: SSEServerTransport | null = null;
+
 export default {
   async fetch(request: Request): Promise<Response> {
-
     const url = new URL(request.url);
 
     // Health check
@@ -406,30 +341,29 @@ export default {
         }),
         {
           status: 200,
-          headers: {
-            "content-type": "application/json"
-          }
+          headers: { "content-type": "application/json" }
         }
       );
     }
 
     // MCP endpoint
-    if (url.pathname === "/mcp") {
+    if (url.pathname === "/mcp" || url.pathname === "/sse") {
+      if (request.method === "GET") {
+        const server = createServer();
+        transport = new SSEServerTransport("/messages", new Response().body as any);
+        await server.connect(transport);
+        return (transport as any).start(request);
+      }
 
-      const server = createServer();
-
-      const transport =
-        new WebStandardStreamableHTTPServerTransport({
-          sessionIdGenerator: undefined
-        });
-
-      await server.connect(transport);
-
-      return await transport.handleRequest(request);
+      if (request.method === "POST" && transport) {
+        return (transport as any).handlePostMessage(request);
+      }
     }
 
-    return new Response("Not found", {
-      status: 404
-    });
+    if (url.pathname === "/messages" && transport && request.method === "POST") {
+      return (transport as any).handlePostMessage(request);
+    }
+
+    return new Response("Not found", { status: 404 });
   }
 };
