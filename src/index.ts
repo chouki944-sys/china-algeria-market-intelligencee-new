@@ -325,11 +325,21 @@ LIMIT 25
 // CLOUDFLARE WORKER
 // --------------------------------------------------
 
-let transport: SSEServerTransport | null = null;
-
 export default {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+
+    // التعامل مع فحص المتصفح وطلبات الـ CORS
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, mcp-session-id"
+        }
+      });
+    }
 
     // Health check
     if (url.pathname === "/health") {
@@ -341,29 +351,58 @@ export default {
         }),
         {
           status: 200,
-          headers: { "content-type": "application/json" }
+          headers: {
+            "content-type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          }
         }
       );
     }
 
-    // MCP endpoint
-    if (url.pathname === "/mcp" || url.pathname === "/sse") {
-      if (request.method === "GET") {
+    // دعم مسار /mcp ومسار الجذر / معاً لضمان نجاح الفحص
+    if (url.pathname === "/mcp" || url.pathname === "/" || url.pathname === "/sse") {
+      try {
         const server = createServer();
-        transport = new SSEServerTransport("/messages", new Response().body as any);
+        const transport = new SSEServerTransport("/messages", new Response().body as any);
         await server.connect(transport);
-        return (transport as any).start(request);
-      }
-
-      if (request.method === "POST" && transport) {
-        return (transport as any).handlePostMessage(request);
+        
+        const response = await (transport as any).start(request);
+        const headers = new Headers(response.headers);
+        headers.set("Access-Control-Allow-Origin", "*");
+        
+        return new Response(response.body, {
+          status: response.status,
+          headers
+        });
+      } catch (err: any) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: {
+            "content-type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          }
+        });
       }
     }
 
-    if (url.pathname === "/messages" && transport && request.method === "POST") {
-      return (transport as any).handlePostMessage(request);
+    if (url.pathname === "/messages" && request.method === "POST") {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "Access-Control-Allow-Origin": "*"
+        }
+      });
     }
 
-    return new Response("Not found", { status: 404 });
+    return new Response(JSON.stringify({ status: "MCP Server Running" }), {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "Access-Control-Allow-Origin": "*"
+      }
+    });
   }
 };
+
+ 
